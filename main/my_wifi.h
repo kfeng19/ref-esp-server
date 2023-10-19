@@ -6,7 +6,14 @@
    software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
    CONDITIONS OF ANY KIND, either express or implied.
 */
+#ifndef MY_WIFI
+#define MY_WIFI
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "esp_event.h"
+#include <string.h>
 
 /* The examples use WiFi configuration that you can set via project configuration menu
 
@@ -45,9 +52,6 @@
 #define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WAPI_PSK
 #endif
 
-/* FreeRTOS event group to signal when we are connected*/
-static EventGroupHandle_t s_wifi_event_group;
-
 /* The event group allows multiple bits for each event, but we only care about two events:
  * - we are connected to the AP with an IP
  * - we failed to connect after the maximum amount of retries */
@@ -55,3 +59,9 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_FAIL_BIT      BIT1
 
 #define EXAMPLE_HTTP_QUERY_KEY_MAX_LEN  (64)
+
+void event_handler(void*, esp_event_base_t , int32_t , void*);
+
+void wifi_init_sta(void);
+
+#endif
