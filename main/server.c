@@ -66,12 +66,6 @@ static EventGroupHandle_t s_wifi_event_group;
  * - we failed to connect after the maximum amount of retries */
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
-#if !CONFIG_IDF_TARGET_LINUX
-#include <esp_wifi.h>
-#include <esp_system.h>
-#include "nvs_flash.h"
-#include "esp_eth.h"
-#endif  // !CONFIG_IDF_TARGET_LINUX
 
 #define EXAMPLE_HTTP_QUERY_KEY_MAX_LEN  (64)
 
