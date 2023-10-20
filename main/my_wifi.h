@@ -58,8 +58,6 @@
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
 
-#define EXAMPLE_HTTP_QUERY_KEY_MAX_LEN  (64)
-
 void event_handler(void*, esp_event_base_t , int32_t , void*);
 
 void wifi_init_sta(void);
