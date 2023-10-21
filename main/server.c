@@ -8,10 +8,6 @@
 #include "my_http.h"
 #include "var.h"
 
-/* A simple example that demonstrates how to create GET and POST
- * handlers for the web server.
- */
-
 void app_main(void)
 {
     static httpd_handle_t server = NULL;

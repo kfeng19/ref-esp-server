@@ -4,6 +4,10 @@
 #include "var.h"
 #include "esp_log.h"
 
+/* A simple example that demonstrates how to create GET and POST
+ * handlers for the web server.
+ */
+
 #define EXAMPLE_HTTP_QUERY_KEY_MAX_LEN  (64)
 
 #if CONFIG_EXAMPLE_BASIC_AUTH
