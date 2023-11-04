@@ -469,6 +469,9 @@ esp_err_t start_webserver(const char *base_path)
     httpd_register_uri_handler(server, &hello);
     httpd_register_uri_handler(server, &echo);
     httpd_register_uri_handler(server, &ctrl);
+    #if CONFIG_EXAMPLE_BASIC_AUTH
+    httpd_register_basic_auth(server);
+    #endif
 
     /* URI handler for getting web server files */
     httpd_uri_t common_get_uri = {
@@ -478,9 +481,6 @@ esp_err_t start_webserver(const char *base_path)
         .user_ctx = rest_context
     };
     httpd_register_uri_handler(server, &common_get_uri);
-    #if CONFIG_EXAMPLE_BASIC_AUTH
-    httpd_register_basic_auth(server);
-    #endif
 
     return ESP_OK;
 err_start:
