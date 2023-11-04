@@ -1,7 +1,7 @@
 #ifndef MY_HTTP
 #define MY_HTTP
-#include <esp_http_server.h>
+#include <esp_check.h>
 
-httpd_handle_t start_webserver(void);
+esp_err_t start_webserver(const char*);
 
 #endif
