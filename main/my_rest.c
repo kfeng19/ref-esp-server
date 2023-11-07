@@ -6,6 +6,7 @@
 #include "esp_http_server.h"
 #include "esp_vfs.h"
 #include <fcntl.h>
+#include "cJSON.h"
 
 /* A simple example that demonstrates how to create GET and POST
  * handlers for the web server.
@@ -438,6 +439,50 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
 }
 
 
+
+/* Simple handler for light brightness control */
+static esp_err_t light_brightness_post_handler(httpd_req_t *req)
+{
+    int total_len = req->content_len;
+    int cur_len = 0;
+    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+    int received = 0;
+    if (total_len >= SCRATCH_BUFSIZE) {
+        /* Respond with 500 Internal Server Error */
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
+        return ESP_FAIL;
+    }
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len);
+        if (received <= 0) {
+            /* Respond with 500 Internal Server Error */
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[total_len] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    // int red = cJSON_GetObjectItem(root, "red")->valueint;
+    // int green = cJSON_GetObjectItem(root, "green")->valueint;
+    // int blue = cJSON_GetObjectItem(root, "blue")->valueint;
+    // ESP_LOGI(REST_TAG, "Light control: red = %d, green = %d, blue = %d", red, green, blue);
+    cJSON *state = cJSON_GetObjectItem(root, "state");
+    if (cJSON_IsBool(state)){
+        bool bstate = cJSON_IsTrue(state);
+        ESP_LOGI(REST_TAG, "Got state %s", bstate ? "true" : "false");
+        cJSON_Delete(root);
+        httpd_resp_sendstr(req, "Post LED value successfully");
+        return ESP_OK;
+    }
+    else
+    {
+        ESP_LOGE(REST_TAG, "Got unexpected type for LED state JSON");
+        return ESP_FAIL;
+    }
+}
+
 esp_err_t start_webserver(const char *base_path)
 {
     REST_CHECK(base_path, "wrong base path", err);
@@ -472,6 +517,15 @@ esp_err_t start_webserver(const char *base_path)
     #if CONFIG_EXAMPLE_BASIC_AUTH
     httpd_register_basic_auth(server);
     #endif
+
+    /* URI handler for light brightness control */
+    httpd_uri_t light_brightness_post_uri = {
+        .uri = "/api/led",
+        .method = HTTP_POST,
+        .handler = light_brightness_post_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &light_brightness_post_uri);
 
     /* URI handler for getting web server files */
     httpd_uri_t common_get_uri = {
