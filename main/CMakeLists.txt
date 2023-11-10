@@ -1,4 +1,4 @@
-idf_component_register(SRCS "server_main.c" "my_wifi.c" "var.c" "my_rest.c"
+idf_component_register(SRCS "server_main.c" "my_wifi.c" "var.c" "my_rest.c" "my_led.c"
                     INCLUDE_DIRS ".")
 
 if(CONFIG_EXAMPLE_WEB_DEPLOY_SF)

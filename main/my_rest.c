@@ -7,6 +7,7 @@
 #include "esp_vfs.h"
 #include <fcntl.h>
 #include "cJSON.h"
+#include "my_led.h"
 
 /* A simple example that demonstrates how to create GET and POST
  * handlers for the web server.
@@ -439,6 +440,7 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
 }
 
 
+led_strip_handle_t my_led;
 
 /* Simple handler for light brightness control */
 static esp_err_t light_brightness_post_handler(httpd_req_t *req)
@@ -472,6 +474,12 @@ static esp_err_t light_brightness_post_handler(httpd_req_t *req)
     if (cJSON_IsBool(state)){
         bool bstate = cJSON_IsTrue(state);
         ESP_LOGI(REST_TAG, "Got state %s", bstate ? "true" : "false");
+        if (my_led == NULL){
+            ESP_LOGI(REST_TAG, "led is null, configuring...");
+            configure_led(&my_led);
+        }
+        blink_led(&my_led, bstate);
+        // Clean up
         cJSON_Delete(root);
         httpd_resp_sendstr(req, "Post LED value successfully");
         return ESP_OK;
