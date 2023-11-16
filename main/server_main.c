@@ -86,6 +86,7 @@ void app_main(void)
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
     wifi_init_sta();
     ESP_ERROR_CHECK(init_fs());
+    start_async_req_workers();
         /* Start the server for the first time */
     ESP_ERROR_CHECK(start_webserver(CONFIG_EXAMPLE_WEB_MOUNT_POINT));
     // server = start_webserver();

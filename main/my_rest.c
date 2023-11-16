@@ -8,6 +8,9 @@
 #include <fcntl.h>
 #include "cJSON.h"
 #include "my_led.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
 
 /* A simple example that demonstrates how to create GET and POST
  * handlers for the web server.
@@ -184,6 +187,148 @@ static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filepa
     return httpd_resp_set_type(req, type);
 }
 
+#define ASYNC_WORKER_TASK_PRIORITY      5
+#define ASYNC_WORKER_TASK_STACK_SIZE    2048
+
+// Async reqeusts are queued here while they wait to
+// be processed by the workers
+static QueueHandle_t async_req_queue;
+
+// Track the number of free workers at any given time
+static SemaphoreHandle_t worker_ready_count;
+
+// Each worker has its own thread
+static TaskHandle_t worker_handles[CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS];
+
+typedef esp_err_t (*httpd_req_handler_t)(httpd_req_t *req);
+
+typedef struct {
+    httpd_req_t* req;
+    httpd_req_handler_t handler;
+} httpd_async_req_t;
+
+
+static bool is_on_async_worker_thread(void)
+{
+    // is our handle one of the known async handles?
+    TaskHandle_t handle = xTaskGetCurrentTaskHandle();
+    for (int i = 0; i < CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS; i++) {
+        if (worker_handles[i] == handle) {
+            return true;
+        }
+    }
+    return false;
+}
+
+
+// Submit an HTTP req to the async worker queue
+static esp_err_t submit_async_req(httpd_req_t *req, httpd_req_handler_t handler)
+{
+    // must create a copy of the request that we own
+    httpd_req_t* copy = NULL;
+    esp_err_t err = httpd_req_async_handler_begin(req, &copy);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    httpd_async_req_t async_req = {
+        .req = copy,
+        .handler = handler,
+    };
+
+    // How should we handle resource exhaustion?
+    // In this example, we immediately respond with an
+    // http error if no workers are available.
+    int ticks = 0;
+
+    // counting semaphore: if success, we know 1 or
+    // more asyncReqTaskWorkers are available.
+    if (xSemaphoreTake(worker_ready_count, ticks) == false) {
+        ESP_LOGE(TAG, "No workers are available");
+        httpd_req_async_handler_complete(copy); // cleanup
+        return ESP_FAIL;
+    }
+
+    // Since worker_ready_count > 0 the queue should already have space.
+    // But lets wait up to 100ms just to be safe.
+    if (xQueueSend(async_req_queue, &async_req, pdMS_TO_TICKS(100)) == false) {
+        ESP_LOGE(TAG, "worker queue is full");
+        httpd_req_async_handler_complete(copy); // cleanup
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+static void async_req_worker_task(void *p)
+{
+    ESP_LOGI(TAG, "starting async req task worker");
+
+    while (true) {
+
+        // counting semaphore - this signals that a worker
+        // is ready to accept work
+        xSemaphoreGive(worker_ready_count);
+
+        // wait for a request
+        httpd_async_req_t async_req;
+        if (xQueueReceive(async_req_queue, &async_req, portMAX_DELAY)) {
+
+            ESP_LOGI(TAG, "invoking %s", async_req.req->uri);
+
+            // call the handler
+            async_req.handler(async_req.req);
+
+            // Inform the server that it can purge the socket used for
+            // this request, if needed.
+            if (httpd_req_async_handler_complete(async_req.req) != ESP_OK) {
+                ESP_LOGE(TAG, "failed to complete async req");
+            }
+        }
+    }
+
+    ESP_LOGW(TAG, "worker stopped");
+    vTaskDelete(NULL);
+}
+
+void start_async_req_workers(void)
+{
+
+    // counting semaphore keeps track of available workers
+    worker_ready_count = xSemaphoreCreateCounting(
+        CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS,  // Max Count
+        0); // Initial Count
+    if (worker_ready_count == NULL) {
+        ESP_LOGE(TAG, "Failed to create workers counting Semaphore");
+        return;
+    }
+
+    // create queue
+    async_req_queue = xQueueCreate(1, sizeof(httpd_async_req_t));
+    if (async_req_queue == NULL){
+        ESP_LOGE(TAG, "Failed to create async_req_queue");
+        vSemaphoreDelete(worker_ready_count);
+        return;
+    }
+
+    // start worker tasks
+    for (int i = 0; i < CONFIG_EXAMPLE_MAX_ASYNC_REQUESTS; i++) {
+
+        bool success = xTaskCreate(async_req_worker_task, "async_req_worker",
+                                    ASYNC_WORKER_TASK_STACK_SIZE, // stack size
+                                    (void *)0, // argument
+                                    ASYNC_WORKER_TASK_PRIORITY, // priority
+                                    &worker_handles[i]);
+
+        if (!success) {
+            ESP_LOGE(TAG, "Failed to start asyncReqWorker");
+            continue;
+        }
+    }
+}
+
+
+
 /* Send HTTP response with the contents of the requested file */
 static esp_err_t rest_common_get_handler(httpd_req_t *req)
 {
@@ -291,6 +436,50 @@ static esp_err_t light_brightness_post_handler(httpd_req_t *req)
     }
 }
 
+
+/* Flag variable to indicate whether sensor measurement should continue */
+bool continue_measurement = false;
+
+/* Handler for POST requests, need to be asynchronous */
+esp_err_t measure_start_handler(httpd_req_t *req)
+{
+        // This handler is first invoked on the httpd thread.
+    // In order to free the httpd thread to handle other requests,
+    // we must resubmit our request to be handled on an async worker thread.
+    if (continue_measurement) {
+        ESP_LOGE(REST_TAG, "Measurement already started!");
+        return ESP_FAIL;
+    }
+    if (is_on_async_worker_thread() == false) {
+        // submit
+        if (submit_async_req(req, measure_start_handler) == ESP_OK) {
+            return ESP_OK;
+        } else {
+            httpd_resp_set_status(req, "503 Busy");
+            httpd_resp_sendstr(req, "<div> no workers available. server busy.</div>");
+            return ESP_OK;
+        }
+    }
+    // Failed in receiving request body so far
+        /* Respond with success */
+        continue_measurement = true;
+        httpd_resp_sendstr(req, "Triggering measurement.");
+
+        /* Trigger sensor measurement indefinitely */
+        while (continue_measurement) {
+            ESP_LOGI(TAG, "Measure.");
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+        }
+    return ESP_OK;
+}
+
+esp_err_t measure_stop_handler(httpd_req_t *req){
+    continue_measurement = false;
+    ESP_LOGI(REST_TAG, "Measurement stopped.");
+    return ESP_OK;
+}
+
+
 esp_err_t start_webserver(const char *base_path)
 {
     REST_CHECK(base_path, "wrong base path", err);
@@ -331,6 +520,25 @@ esp_err_t start_webserver(const char *base_path)
         .user_ctx = rest_context
     };
     httpd_register_uri_handler(server, &light_brightness_post_uri);
+
+    /* URI handler for measurement */
+    httpd_uri_t measure_uri = {
+        .uri       = "/api/measure/start",
+        .method    = HTTP_POST,
+        .handler   = measure_start_handler,
+        .user_ctx  = rest_context
+    };
+    httpd_register_uri_handler(server, &measure_uri);
+
+    /* URI handler for measurement */
+    httpd_uri_t measure_stop_uri = {
+        .uri       = "/api/measure/stop",
+        .method    = HTTP_POST,
+        .handler   = measure_stop_handler,
+        .user_ctx  = rest_context
+    };
+    httpd_register_uri_handler(server, &measure_stop_uri);
+
 
     /* URI handler for getting web server files */
     httpd_uri_t common_get_uri = {

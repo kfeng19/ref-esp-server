@@ -4,4 +4,6 @@
 
 esp_err_t start_webserver(const char*);
 
+void start_async_req_workers();
+
 #endif

@@ -1,13 +1,19 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Two Buttons</title>
+    <title>Rest</title>
     <script src="scripts.js"></script>
 </head>
 <body>
+    <h2>LED</h2>
     <form id="myform">
         <button type="button" onclick="postRequest1()">LED ON</button>
         <button type="button" onclick="postRequest2()">LED OFF</button>
+    </form>
+    <h2>Sensor</h2>
+    <form id="measure">
+        <button type="button" onclick="measure_request1()">start</button>
+        <button type="button" onclick="measure_request2()">stop</button>
     </form>
 </body>
 </html>
