@@ -1,21 +1,12 @@
-// #include <string.h>
 #include "esp_log.h"
 #include "nvs_flash.h"
-// #include "lwip/err.h"
-// #include "lwip/sys.h"
-// #include "esp_netif.h"
 #include "esp_event.h"
 #include "my_wifi.h"
 #include "my_rest.h"
 #include "var.h"
 #include "mdns.h"
 #include "lwip/apps/netbiosns.h"
-// #include "esp_vfs_fat.h"
 #include "esp_spiffs.h"
-// #include "sdkconfig.h"
-// #include "driver/gpio.h"
-// #include "esp_vfs_semihost.h"
-// #include "sdmmc_cmd.h"
 
 #define MDNS_INSTANCE "esp home web server"
 
