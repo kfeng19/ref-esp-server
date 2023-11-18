@@ -8,9 +8,9 @@
 #include <fcntl.h>
 #include "cJSON.h"
 #include "my_led.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
+// #include "freertos/FreeRTOS.h"
+// #include "freertos/task.h"
+// #include "freertos/semphr.h"
 
 /* A simple example that demonstrates how to create GET and POST
  * handlers for the web server.
